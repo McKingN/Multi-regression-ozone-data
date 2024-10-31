@@ -1,0 +1,853 @@
+---
+title: "TP Régression multi-linéaire - Mardoché Clabessi"
+output: html_notebook
+---
+
+```{r}
+# Charger les bibliothèques nécessaires
+if (!require("stats")) install.packages("stats")
+library(stats)
+if (!require("lmtest")) install.packages("lmtest")
+library(lmtest)
+if (!require("leaps")) install.packages("leaps")
+library(leaps)
+if (!require("lattice")) install.packages("lattice")
+library(lattice)
+```
+
+## Contextualisation
+
+Les objectifs du TP ont été :
+
+1.  Extraction, lecture et visualisation d’un tableau de données sur R
+2.  Ajustement des données à un modèle de régression linéaire à l’aide de R
+3.  Analyse de la pertinence du modèle choisi
+
+## Référence: Régression avec R de Cornillon et Matzner-Lober
+
+## 1. Récupération des données dans R en utilisant la commande suivante : ozone \<- read.csv(...)
+
+```{r}
+ozone <- read.csv(file="C:\\Users\\McKing.DESKTOP-4Q7G3QP\\Documents\\GitHub\\3A Marseille\\Multi-regression-ozone-data\\ozone.csv",sep=";")
+```
+
+## 2. Affichage de la structure, les types et la nature des variables du jeu de données
+
+```{r}
+# Afficher les noms des variables
+names(ozone)
+
+# Afficher les premières lignes de la donnée pour observer les types
+head(ozone)
+```
+
+```{r}
+str(ozone)
+```
+
+Nous remarquons que les températeures et les projections du vent ont été prises par R comme des charatères. Nous allons corriger cela avec le code suivant qui les transforme en numérique en prenant en compte le fait que la virgule est séparateur de décimal ici.
+
+```{r}
+# Fonction pour convertir les colonnes de caractère en numérique
+convert_to_numeric <- function(column) {
+  as.numeric(gsub(",", ".", column))  # Remplace les virgules par des points et convertit en numérique
+}
+
+# Appliquer la fonction de conversion aux colonnes concernées
+ozone$T9 <- convert_to_numeric(ozone$T9)
+ozone$T12 <- convert_to_numeric(ozone$T12)
+ozone$T15 <- convert_to_numeric(ozone$T15)
+ozone$Vx9 <- convert_to_numeric(ozone$Vx9)
+ozone$Vx12 <- convert_to_numeric(ozone$Vx12)
+ozone$Vx15 <- convert_to_numeric(ozone$Vx15)
+```
+
+### Vérification du résultat
+
+```{r}
+head(ozone)
+str(ozone)  # Affiche la structure mise à jour du data frame
+```
+
+## 3. Représentons maxO3 en fonction de T12
+
+```{r}
+plot(ozone$T12, ozone$maxO3,
+     xlab = "Température à 12h (T12)",
+     ylab = "Maximum d'ozone (maxO3)",
+     main = "Représentation de maxO3 en fonction de T12",
+     pch = 19,       # Type de point
+     col = "blue")   # Couleur des points
+```
+
+## 4. Representons le maximum de l'ozone en fonction du vent et de la pluie puis representons le vent en fonction de la température.
+
+### 4.1 Représentons maxO3 en fonction du vent
+
+```{r}
+# Représentation de maxO3 en fonction du vent
+boxplot(ozone$maxO3 ~ ozone$vent,
+        xlab = "Catégories de vent", 
+        ylab = "Maximum d'ozone (maxO3)", 
+        main = "Distribution du maximum d'ozone par catégories de vent",
+        col = "lightblue")
+```
+
+### 4.2 Représentons maxO3 en fonction de la pluie
+
+```{r}
+boxplot(ozone$maxO3 ~ ozone$pluie,
+        xlab = "Catégories de pluie", 
+        ylab = "Maximum d'ozone (maxO3)", 
+        main = "Distribution du maximum d'ozone par catégories de pluie",
+        col = "lightcoral")
+```
+
+### 4.3 Représentons le vent en fonction de la température
+
+```{r}
+boxplot(ozone$T12 ~ ozone$vent,
+        xlab = "Catégories de vent", 
+        ylab = "Température à midi (T12)", 
+        main = "Distribution de T12 par catégories de vent",
+        col = "lightgreen")
+```
+
+## 5. Obtenons les statistiques descriptives du jeu de données
+
+```{r}
+summary(ozone)
+```
+
+### Interprétations des statistiques descriptives
+
+-   **obs**
+    -   **Min.** : 601
+    -   **Max.** : 930
+    -   **Interprétation** : La variable `obs` représente l'identifiant des observations dans le jeu de données. Elle va de 601 à 930, indiquant qu'il y a 112 observations uniques.
+-   **maxO3**
+    -   **Min.** : 42.00
+    -   **1st Qu.** : 70.75
+    -   **Median** : 81.50
+    -   **Mean** : 90.30
+    -   **3rd Qu.** : 106.00
+    -   **Max.** : 166.00
+    -   **Interprétation** : La variable `maxO3` représente les niveaux maximaux d'ozone mesurés. Les niveaux varient de 42 à 166, avec une médiane de 81.50 et une moyenne de 90.30, ce qui indique que la majorité des valeurs sont inférieures à 90.30, mais quelques observations ont des niveaux élevés (jusqu'à 166).
+-   **T9**
+    -   **Min.** : 11.30
+    -   **1st Qu.** : 16.20
+    -   **Median** : 17.80
+    -   **Mean** : 18.36
+    -   **3rd Qu.** : 19.93
+    -   **Max.** : 27.00
+    -   **Interprétation** : Cette variable représente la température mesurée à 9 heures. Les températures varient de 11.30 à 27.00, avec une médiane de 17.80, suggérant que les mesures se concentrent autour de 17-19°C.
+-   **T12**
+    -   **Min.** : 14.00
+    -   **1st Qu.** : 18.60
+    -   **Median** : 20.55
+    -   **Mean** : 21.53
+    -   **3rd Qu.** : 23.55
+    -   **Max.** : 33.50
+    -   **Interprétation** : La température mesurée à 12 heures varie de 14.00 à 33.50°C, avec une moyenne de 21.53, indiquant des températures généralement plus élevées à midi par rapport à 9 heures.
+-   **T15**
+    -   **Min.** : 14.90
+    -   **1st Qu.** : 19.27
+    -   **Median** : 22.05
+    -   **Mean** : 22.63
+    -   **3rd Qu.** : 25.40
+    -   **Max.** : 35.50
+    -   **Interprétation** : Les températures mesurées à 15 heures vont de 14.90 à 35.50°C, avec une moyenne de 22.63, indiquant une augmentation continue des températures durant la journée.
+-   **Ne9, Ne12, Ne15**
+    -   **Min.** : 0, 0, 0
+    -   **Max.** : 8, 8, 8
+    -   **Interprétation** : Ces variables représentent probablement le nombre d'événements ou d'occurrences (par exemple, le nombre de fois que la concentration d'ozone dépasse un certain seuil) à 9, 12, et 15 heures. Les valeurs varient principalement entre 0 et 8, avec des médianes autour de 5, suggérant une fréquence modérée des événements.
+-   **Vx9, Vx12, Vx15**
+    -   **Min.** : -7.8785, -7.878, -9.000
+    -   **Max.** : 6.578, 6.578, 5.000
+    -   **Interprétation** : Ces variables représentent probablement des mesures de vent (ou des variations) à différents moments de la journée. Les valeurs négatives peuvent indiquer des vents contraires ou des directions spécifiques.
+-   **maxO3v**
+    -   **Min.** : 42.00
+    -   **1st Qu.** : 71.00
+    -   **Median** : 82.50
+    -   **Mean** : 90.57
+    -   **3rd Qu.** : 106.00
+    -   **Max.** : 166.00
+    -   **Interprétation** : Cette variable semble être une seconde mesure des niveaux maximaux d'ozone, similaire à `maxO3`, avec des statistiques qui montrent une distribution similaire.
+
+9.  **vent**
+    -   **Caractère** : les valeurs sont des catégories (e.g., "Nord", "Est").
+10. **pluie**
+    -   **Caractère** : les valeurs sont des catégories (e.g., "Sec").
+
+## 6.
+
+### 6.1 Analysons la normalité de la variable maxO3 à l’aide d’un Q-Q Plot
+
+Le Q-Q Plot (Quantile-Quantile Plot) compare les quantiles de la distribution de notre échantillon à ceux d'une distribution normale, permettant ainsi de visualiser si les données suivent une distribution normale.
+
+```{r}
+# Q-Q Plot de maxO3
+qqnorm(ozone$maxO3)
+qqline(ozone$maxO3, col = "red")
+```
+
+**Interprétation du Q-Q Plot :** On remarque que les points s'écartent considérablement de la ligne, cela suggère une déviation par rapport à la normalité.
+
+### 6.2 Test de Shapiro-Wilk
+
+Le test de Shapiro-Wilk teste l'hypothèse nulle selon laquelle les données sont normalement distribuées.
+
+-   **Hypothèse nulle (H0)**: Les données suivent une distribution normale.
+-   **Hypothèse alternative (H1)**: Les données ne suivent pas une distribution normale.
+
+##### Exécution du test :
+
+```{r}
+# Test de Shapiro-Wilk
+shapiro_test <- shapiro.test(ozone$maxO3)
+
+# Afficher les résultats
+print(shapiro_test)
+```
+
+**Interprétation des résultats :** - La statistique W est de 0.906, ce qui suggère une certaine déviation par rapport à la normalité. - La p-value est très faible ($8.516e^{-7}$), bien inférieure à 0.05. Cela nous amène à rejeter l'hypothèse nulle.
+
+Ainsi, les données du maximum d'ozone max03 ne suivent pas une distribution normale.
+
+## 7. Nous allons nous intéresser plus particulièrement à deux variables du jeu de données : la variable maxO3 et la variable T12.
+
+### (a) Statistiques élémentaires
+
+Pour obtenir les statistiques descriptives sur maxO3 et T12, nous pouvons utiliser la commande summary :
+
+```{r}
+# Statistiques élémentaires sur maxO3 et T12
+summary(ozone[, c("maxO3", "T12")])
+```
+
+#### Interprétations
+
+**Variable `maxO3`** : - **Minimum** : La valeur minimale de `maxO3` est 42.00. - **Maximum** : La valeur maximale est 166.00. - **Moyenne** : La moyenne est de 90.30, ce qui indique la concentration moyenne d'ozone sur l'ensemble des observations. - **Médiane** : La médiane est de 81.50, signifiant que 50 % des observations se situent en dessous de cette valeur. - **Quartiles** : Le premier quartile (Q1) est à 70.75, et le troisième quartile (Q3) est à 106.00, ce qui montre la dispersion des données.
+
+2.  **Variable `T12`** :
+    -   **Minimum** : La température minimale mesurée à T12 est de 14.00.
+    -   **Maximum** : La température maximale est de 33.50.
+    -   **Moyenne** : La température moyenne à T12 est de 21.53.
+    -   **Médiane** : La médiane est de 20.55, indiquant que 50 % des observations sont inférieures à cette température.
+    -   **Quartiles** : Le premier quartile (Q1) est de 18.60 et le troisième quartile (Q3) est de 23.55, ce qui permet d'évaluer la variabilité de la température.
+
+### (b) Nuage de points
+
+Pour représenter le nuage de points de maxO3 en fonction de T12, utilisons la commande plot :
+
+```{r}
+# Nuage de points
+plot(ozone$T12, ozone$maxO3, 
+     xlab = "Température (T12)", 
+     ylab = "Maximum d'Ozone (maxO3)", 
+     main = "Nuage de Points : maxO3 vs T12",
+     pch = 19,             
+     col = "blue")
+```
+
+### (c) Modèle de régression
+
+Pour créer un modèle de régression de maxO3 par rapport à T12, utilisons la fonction lm :
+
+```{r}
+# Modèle de régression
+reg1 <- lm(maxO3 ~ T12, data = ozone)
+
+# Résumé du modèle
+summary(reg1)
+```
+
+### (d) Analyse des résultats et déduction
+
+À partir des résultats de la régression linéaire, voici ce que nous pouvons déduire :
+
+**Coefficients** :
+
+-   **Intercept** : Le coefficient de l'ordonnée à l'origine est -27.42. Cela signifie que lorsque `T12` (température) est égale à 0°C, la valeur de `maxO3` est estimée à -27.42 ppb. Étant donné que les concentrations d'ozone ne peuvent pas être négatives, cette interprétation doit être faite avec précaution. Cela suggère que le modèle n'est pas nécessairement valable en dehors des plages de température observées.
+
+-   **Coefficient de T12** : Le coefficient de `T12` est 5.47. Cela indique qu'une augmentation de 1°C dans `T12` est associée à une augmentation d'environ 5.47 ppb de `maxO3`. Ce résultat est significatif avec une valeur p très faible (\<2e-16), ce qui indique que la température a un impact fort et statistiquement significatif sur les niveaux de `maxO3`.
+
+**Statistiques de Signification** : - Les valeurs p associées à l'intercept et au coefficient de `T12` sont toutes deux inférieures à 0.01, indiquant que ces coefficients sont significativement différents de zéro. En particulier, le coefficient de `T12` a une signification très élevée (\*\*\*) suggérant un effet fort.
+
+**R-squared** : - Le R² ajusté est de 0.6116, ce qui signifie que 61.16% de la variance de `maxO3` est expliquée par le modèle de régression. Cela indique un bon niveau d'explication, bien que cela laisse encore environ 38.84% de la variance inexpliquée par ce modèle. D'autres facteurs non inclus dans le modèle pourraient également influencer `maxO3`.
+
+**F-statistic** : - La statistique F est de 175.8 avec un p-value de \< 2.2e-16, ce qui indique que le modèle global est significatif. Cela signifie qu'il y a des preuves solides que le modèle linéaire avec `T12` prédit mieux `maxO3` qu'un modèle sans prédicteur.
+
+Dans l'ensemble, nous pouvons déduire qu'il serait intéressant d'explorer également des interactions avec d'autres variables pour mieux comprendre les déterminants de `maxO3`.
+
+## 8. Proposons un modèle de régression de maxO3 par rapport aux variables Ne12 et maxO3v.
+
+```{r}
+reg2 <- lm(maxO3 ~ Ne12 + maxO3v, data = ozone)
+summary(reg2)
+```
+
+### Analyse des résultats et déduction
+
+À partir des résultats de l'analyse de régression du modèle `maxO3 ~ Ne12 + maxO3v`, nous pouvons tirer les conclusions suivantes :
+
+**Coefficients** :
+
+-   **Intercept (71.31)** : Lorsque les variables `Ne12` et `maxO3v` sont toutes deux égales à zéro, la valeur prédite de `maxO3` est de 71.31. Ce point d'interception donne une idée de la base de référence pour `maxO3`.
+
+-   **Ne12 (-5.59)** : Pour chaque augmentation de 1 unité de `Ne12`, la variable `maxO3` diminue en moyenne de 5.59 unités. Cela indique une relation négative significative entre `Ne12` et `maxO3`, ce qui pourrait suggérer que l'augmentation de `Ne12` est associée à une diminution des niveaux de l'ozone.
+
+-   **maxO3v (0.52)** : Pour chaque augmentation de 1 unité de `maxO3v`, la variable `maxO3` augmente en moyenne de 0.52 unités. Cela indique une relation positive significative entre `maxO3v` et `maxO3`.
+
+**Significativité des Coefficients** : - Les valeurs p associées à tous les coefficients sont très inférieures à 0.001 (Pr(\>\|t\|)), ce qui indique que les effets des variables `Ne12` et `maxO3v` sur `maxO3` sont statistiquement significatifs. En d'autres termes, il y a suffisamment de preuves pour rejeter l'hypothèse nulle selon laquelle ces coefficients sont égaux à zéro.
+
+**Erreur Résiduelle** : - L'erreur standard résiduelle (16.92) indique la variation des résidus autour de la ligne de régression. Une erreur standard plus faible suggérerait un meilleur ajustement du modèle.
+
+**R-squared (0.6463)** : - Environ 64.63 % de la variation de `maxO3` peut être expliquée par les variables `Ne12` et `maxO3v`. Cela indique que le modèle a une capacité modérée à prédire `maxO3`.
+
+**F-statistic (99.59)** : - La statistique F avec un p-value de moins de 2.2e-16 indique que le modèle global est significatif. Cela signifie qu'au moins une des variables indépendantes (soit `Ne12`, soit `maxO3v`) a un effet significatif sur `maxO3`. Dans notre cas, la valeur de *Adjusted R-squared(0.6398)* très proche du *R-squared (0.6463)* nous permet de dire que les deux variables ont un effet significatif. En effet, si c'était pas le cas, le *Adjusted R-squared(0.6398)* présenterait une pénalité plus forte par rapport à la quantité de variance expliquée.
+
+On peut déduire de cette analyse que le modèle est significatif mais d'autres facteurs non mesurés peuvent également influencer `maxO3`, et des analyses supplémentaires pourraient être nécessaires pour explorer ces relations plus en profondeur.
+
+## 9. Modèle de régression complet.
+
+### (a) A laide de la fonction lm estimer les parametres de la regression de maxO3 sur les autres variables et a cher les estimateurs.
+
+```{r}
+# Modèle de régression complet
+regc <- lm(maxO3 ~ ., data = ozone)
+
+
+# Afficher les coefficients estimés
+regc$coefficients
+```
+
+\###(b) Extraction des résidus et tracé de leur histogramme.
+
+```{r}
+# Extraire les résidus du modèle de régression complet
+residuals <- regc$residuals
+
+# Tracer l'histogramme des résidus
+hist(residuals, 
+     main = "Histogramme des Résidus", 
+     xlab = "Résidus", 
+     col = "lightblue", 
+     border = "black")
+
+```
+
+L'histogramme a une forme approximativement en cloche concentrée autour de 0. Cela suggère qu les résidus pourraient être distribués normalement.
+
+### (c) A l’aide d’un Q-Q Plot comparons les quantiles des résidus avec les quantiles d’une loi gaussienne
+
+```{r}
+# Tracer le Q-Q plot des résidus
+qqnorm(regc$residuals, main = "Q-Q Plot des Résidus")
+qqline(regc$residuals, col = "red")  # Ajouter la ligne de référence
+```
+
+#### Interprétation
+
+Les points sont proches de la ligne rouge, cela suggère que les résidus pourraient être normalement distribués.
+
+### (d) Etudions la normalité des résidus à l’aide d’un test Shapiro-Wilk
+
+```{r}
+# Effectuer le test de Shapiro-Wilk sur les résidus
+shapiro_test <- shapiro.test(regc$residuals)
+
+# Afficher les résultats du test
+shapiro_test
+```
+
+Avec les résultats du test de Shapiro-Wilk :
+
+```         
+Shapiro-Wilk normality test
+
+data:  regc$residuals
+W = 0.97333, p-value = 0.02419
+```
+
+#### Interprétation des Résultats
+
+**Statistique W** : La valeur de W est 0.97333. Cette statistique mesure à quel point les résidus s'écartent d'une distribution normale. Plus W est proche de 1, plus les données sont susceptibles de suivre une distribution normale.
+
+**p-value** : La p-value est 0.02419, qui est inférieure au seuil habituel de 0.05.
+
+-   **Rejet de l'Hypothèse Nulle** : Comme la p-value est inférieure à 0.05, nous rejetons l'hypothèse nulle (H0) selon laquelle les résidus suivent une distribution normale. Cela indique que les résidus ne sont pas normalement distribués.
+
+### (e) Appliquons le test de Kolmogorov-Smirnov.
+
+```{r}
+# Appliquer le test de Kolmogorov-Smirnov
+ks_result <- ks.test(regc$residuals, "pnorm", mean = mean(regc$residuals), sd = sd(regc$residuals))
+
+# Afficher les résultats
+ks_result
+```
+
+### Comparaison entre les deux tests
+
+Oui, les résultats du test de Kolmogorov-Smirnov conduisent à une conclusion différente de celle du test de Shapiro-Wilk. En effet :
+
+#### Résultats du Test de Kolmogorov-Smirnov
+
+-   **D = 0.059328** : Cela représente la statistique de test, qui mesure l'écart maximum entre la distribution empirique des résidus et la distribution normale.
+
+-   **p-value = 0.8254** : Cela indique une probabilité très élevée d'observer un tel écart si les résidus suivent réellement une distribution normale.
+
+#### Interprétation
+
+-   **Hypothèse nulle** : Les résidus suivent une distribution normale.
+
+-   **Décision** : Comme la p-value (0.8254) est bien supérieure à 0.05, nous **ne rejettons pas l'hypothèse nulle**. Cela signifie que les résultats ne fournissent pas suffisamment de preuves pour dire que les résidus ne suivent pas une distribution normale.
+
+Ainsi,
+
+Les deux tests (Shapiro-Wilk et Kolmogorov-Smirnov) fournissent des conclusions contradictoires :
+
+-   Le **test de Shapiro-Wilk** suggère que les résidus ne suivent pas une distribution normale.
+-   Le **test de Kolmogorov-Smirnov** ne rejette pas l'hypothèse de normalité.
+
+Cette discordance pourrait être expliqué par le fait que le test de Shapiro-Wilk est plus sensible aux petites déviations de la normalité, surtout lorsque la taille de l'échantillon est modérée ou grande. En revanche, le test de Kolmogorov-Smirnov peut être moins sensible aux écarts par rapport à la normalité dans certaines situations.
+
+### (f) Quel autre test, vu en Approfondissement S7 MIE, pourriez-vous appliquer pour tester la normalité?
+
+Je n'étais pas en S7 MIE. Cependant, nous pourrions envisager d'autres tests de normalité, comme le test **Anderson-Darling** ou le test de **Lilliefors**.
+
+### (g) Etudions graphiquement l’homoscédasticité des résidus:
+
+```{r}
+# Tracer les résidus absolus en fonction des valeurs ajustées
+plot(regc$fitted.values, abs(regc$residuals), col=2, 
+     xlab = "Valeurs Ajustées", 
+     ylab = "Résidus Absolus", 
+     main = "Homoscédasticité des Résidus")
+
+# Ajouter une ligne de tendance avec LOWESS
+lines(lowess(regc$fitted.values, abs(regc$residuals), f=0.7), col="blue")
+```
+
+### Interprétation du Graphique
+
+**Axes du graphique** : - L'axe des x représente les **valeurs ajustées** (fitted values) du modèle. - L'axe des y représente les **résidus absolus**.
+
+**Analyse visuelle** : - Les points ne sont pas dispersés de manière uniforme autour de la ligne horizontale, cela indique que les résidus ne sont pas
+
+**Ligne de tendance LOWESS** : - La ligne de tendance ajoute une représentation visuelle de la tendance des résidus. Si cette ligne était plate et proche de zéro, cela soutiendrait l'hypothèse d'homoscédasticité. Cependant, ce n'est vraiment pas le cas visiblement.
+
+### (h) Les résidus obtenus ne sont pas de même variance (hétéroscédastiques). Nous allons utiliser alors les résidus studentisés, qui eux sont de même variance.
+
+```{r}
+# Calculer les résidus studentisés
+res.simple <- rstudent(regc)
+
+# Tracer les résidus studentisés
+plot(res.simple, pch=15, cex=0.5, 
+     ylab="Résidus", 
+     ylim=c(-3, 3), 
+     main="Résidus Studentisés")
+
+# Ajouter des lignes pour -2, 0, et 2
+abline(h=c(-2, 0, 2), lty=c(2, 1, 2))
+```
+
+### Interprétation du Graphique
+
+**Axes du graphique** : - L'axe des y représente les **résidus studentisés**. - L'axe des x n'est pas spécifié ici, mais il s'agit de l'indice d'observation.
+
+**Analyse visuelle** : - Les résidus studentisés devraient être centrés autour de zéro, avec une dispersion relativement uniforme. - Les lignes horizontales à -2 et 2 servent de repères pour évaluer les valeurs extrêmes. Les 05 observations en dehors de cette plage peuvent être considérées des outliers.
+
+-   Les résidus studentisés sont concentrés autour de zéro, cela indique que le modèle s'ajuste correctement aux données, malgré l'hétéroscédasticité des résidus observée précédemment.
+
+### (i) Appliquons le test Breusch-Pagan (bptest sous R)
+
+```{r}
+# Appliquer le test de Breusch-Pagan
+bp_test <- bptest(regc)
+
+# Afficher les résultats du test
+bp_test
+```
+
+### Objectif de ce test
+
+Le test de Breusch-Pagan est un test statistique utilisé pour détecter l'hétéroscédasticité dans un modèle de régression. En effet les hypothèses de la régression linéaire suggèrent une homoscédasticité des résidus.
+
+### Hypothèses du test
+
+-   **Hypothèse nulle (H0)** : Les résidus du modèle sont homoscédastiques, ce qui signifie qu'ils ont une variance constante.
+-   **Hypothèse alternative (H1)** : Les résidus du modèle sont hétéroscédastiques, ce qui signifie que la variance des résidus varie en fonction des valeurs des variables indépendantes.
+
+Après le test,
+
+-   **Si la p-value est faible (généralement \< 0.05)** : Cela indique que l'hypothèse nulle peut être rejetée, ce qui suggère la présence d'hétéroscédasticité dans le modèle.
+-   **Si la p-value est élevée (généralement \> 0.05)** : Cela indique que nous ne pouvons pas rejeter l'hypothèse nulle, suggérant que les résidus sont homoscédastiques.
+
+### Déduction
+
+Après avoir analysé les résultats du test de Breusch-Pagan, voici ce que nous pouvons en déduire :
+
+-   **p-value = 0.03625** : Cette valeur est inférieure au seuil habituel de 0.05.
+
+-   **Conclusion** : Nous rejetons l'hypothèse nulle d'homoscédasticité. Cela indique qu'il existe des preuves statistiques de la présence d'hétéroscédasticité dans notre modèle de régression.
+
+-   **Implications** : La présence d'hétéroscédasticité signifie que la variance des résidus dépend des valeurs des variables indépendantes, ce qui peut affecter la précision des estimations des coefficients et les tests d'hypothèses associés. Cela peut conduire à des intervalles de confiance non fiables et à des tests statistiques biaisés.
+
+### (j) Analysons graphiquement la structuration temporelle des résidus?
+
+```{r}
+# Tracer les résidus
+plot(regc$residuals, col=2, main="Résidus du modèle de régression", 
+     ylab="Résidus", xlab="Index des Observations")
+
+# Ajouter une ligne de tendance
+lines(lowess(regc$residuals, f=0.7), lty=2, col="blue")
+```
+
+### Interprétation des Résultats
+
+**Analyse Visuelle** : - Les résidus sont dispersés autour de zéro, cela indique que le modèle est bien ajusté et que les erreurs sont aléatoires.
+
+**Hétéroscédasticité** : - On ne remarque pas une variation croissante ou décroissante des résidus avec l'index des observations, donc cela ne renforce pas l'idée d'hétéroscédasticité, comme indiqué par le test de Breusch-Pagan.
+
+### (k) Appliquons le test de Durbin-Watson (dwtest sous R)
+
+```{r}
+# Appliquer le test de Durbin-Watson
+dw_result <- dwtest(regc)
+dw_result
+```
+
+### Objectif du test de Durbin-Watson
+
+Le test de Durbin-Watson est une méthode statistique utilisée pour détecter la présence d'autocorrélation dans les résidus d'un modèle de régression. L'autocorrélation se produit lorsque les erreurs (résidus) d'un modèle de régression ne sont pas indépendantes, ce qui peut entraîner des estimations biaisées des coefficients et une invalidation des hypothèses du modèle.
+
+#### Hypothèses du Test
+
+-   **Hypothèse nulle (H0)** : Les résidus sont indépendants (pas d'autocorrélation).
+-   **Hypothèse alternative (H1)** : Les résidus présentent une autocorrélation.
+
+#### Statistique de Test
+
+La statistique de Durbin-Watson (DW) varie entre 0 et 4 :
+
+### Analyse des Résultats du Test de Durbin-Watson et Déduction
+
+Voici ce que nous pouvons déduire des résultats du test de Durbin-Watson :
+
+-   **Statistique DW** :
+    -   La valeur de la statistique Durbin-Watson est **1.8395**. Cette valeur se situe entre 0 et 2, ce qui indique une tendance à l'autocorrélation positive. En effet, plus la valeur se rapproche de 2, moins il y a de preuves d'autocorrélation.
+-   **p-value** :
+    -   La p-value associée est **0.1313**, ce qui est supérieur à un seuil de signification typique de 0.05. Cela signifie que nous n'avons pas suffisamment de preuves pour rejeter l'hypothèse nulle.
+
+En **conclusions**,
+
+**Pas d'Autocorrélation Significative** : - Étant donné que la p-value est supérieure à 0.05, nous ne rejetons pas l'hypothèse nulle. Cela suggère qu'il n'y a pas d'autocorrélation significative dans les résidus de notre modèle de régression.
+
+**Confiance dans le Modèle** : - L'absence d'autocorrélation des résidus renforce la validité de notre modèle de régression. Nous pouvons avoir plus confiance dans les estimations des coefficients, et les intervalles de confiance et les tests d'hypothèse basés sur ces résidus sont plus fiables.
+
+**Valeur DW Proche de 2** : - Bien que la statistique DW soit inférieure à 2, elle est relativement proche de cette valeur, ce qui indique que la dépendance entre les résidus est faible.
+
+Dans l'ensemble, les résultats du test de Durbin-Watson indiquent que notre modèle de régression ne présente pas d'autocorrélation significative dans les résidus. Cela signifie que les erreurs de prévision du modèle ne sont pas systématiquement liées entre elles, ce qui valide l'hypothèse d'indépendance des erreurs dans notre analyse.
+
+### (l) Appliquons le test de Breusch-Godfrey (bgtest sous R)
+
+```{r}
+# Application du test de Breusch-Godfrey
+bg_test_result <- bgtest(regc, order = 1)  # 'order' spécifie le nombre de lags
+bg_test_result
+```
+
+### Objectif du test de Breusch-Godfrey
+
+Le test de Breusch-Godfrey est un test statistique utilisé pour détecter l'autocorrélation des résidus dans un modèle de régression. Contrairement au test de Durbin-Watson, qui ne teste que l'autocorrélation d'ordre 1, le test de Breusch-Godfrey peut être appliqué pour détecter l'autocorrélation d'ordre supérieur.
+
+#### Hypothèses du Test
+
+-   **Hypothèse nulle (H0)** : Il n'y a pas d'autocorrélation des résidus (les erreurs sont indépendantes) d'ordre 1.
+-   **Hypothèse alternative (H1)** : Il existe une autocorrélation des résidus.
+
+#### Statistique de Test
+
+-   La statistique de test suit une distribution du chi-deux avec $k$ degrés de liberté, où $k$ est le nombre de lags inclus dans le modèle.
+
+### Analyse des Résultats du Test de Breusch-Godfrey et Déduction
+
+Voici ce que nous pouvons déduire des résultats du test de Breusch-Godfrey :
+
+**Analyse de la p-value** : - La p-value obtenue est de 0.2493, ce qui est bien supérieur au seuil de signification habituel de 0.05. - Cela signifie que nous ne rejetons pas l'hypothèse nulle.
+
+**Conclusion** : - Il n'y a pas de preuve suffisante pour conclure qu'il existe une autocorrélation des résidus dans le modèle de régression. Cela suggère que les résidus sont indépendants et que les hypothèses du modèle de régression sont respectées.
+
+#### Implications
+
+-   **Modèle Valide** : L'absence d'autocorrélation des résidus indique que le modèle de régression que nous avons estimé est probablement un bon modèle et que les résultats obtenus sont fiables.
+-   **Interprétation des Coefficients** : Nous pouvons avoir confiance dans les estimations des coefficients et leurs significativités, car l'autocorrélation peut fausser les erreurs standards des coefficients.
+
+### (m) Répérage de structure particulière du nuage ou la présence de ”grands” résidus:
+
+```{r}
+# Calculer les résidus studentisés
+res.student <- rstudent(regc)
+
+# Récupérer les valeurs prédites
+ychap <- regc$fitted.values
+
+# Tracer les résidus studentisés
+plot(res.student, ylab="Résidus", main="Nuage des Résidus Studentisés")
+abline(h=c(-2, 0, 2), lty=c(2, 1, 2))  # Ajouter des lignes horizontales aux niveaux -2, 0 et 2
+
+```
+
+**Observation des Grands Résidus** : - En recherchant des points qui se trouvent en dehors de la plage entre -2 et 2, on observe 3 points au dessus de 2 et 1 point en dessous de -2.
+
+**Structure Particulière** : - Les résidus ne semblent pas suivre une certaine tendance. Les résidus sont distribués aléatoirement autour de la ligne horizontale à 0 sans motifs discernables.
+
+### (n) Repérage d’éventuels points influents.
+
+```{r}
+# Calculer la distance de Cook
+cook <- cooks.distance(regc)
+
+# Récupérer les valeurs prédites
+ychap <- regc$fitted.values
+
+# Tracer la distance de Cook par rapport aux valeurs prédites avec limites personnalisées
+plot(cook ~ ychap, ylab="Distance de Cook", ylim=c(0, 1), main="Distance de Cook vs Valeurs Prédites")
+abline(h=c(0, 1), lty=c(1, 2))  # Ajouter des lignes horizontales aux niveaux 0 et 1
+```
+
+#### Identification des Points Influents :
+
+-   En recherchant les points qui dépassent la ligne à 1, on en trouve pas.Ainsi, il n'y a pas de points influents qui peuvent affecter la stabilité et l'interprètation du modèle.
+
+### (o) Analysons la significativité des variables et proposons les variables pertinentes.
+
+```{r}
+summary(regc)
+```
+
+Pour analyser la significativité des variables dans le modèle de régression, nous allons examiner les coefficients, les p-values associées et les niveaux de signification.
+
+**Intercept** : - Estimation : 26.18680 - p-value : 0.1801 (non significatif) - L'intercept n'est pas significatif, ce qui signifie qu'il n'est pas différent de zéro dans le contexte du modèle.
+
+**Variable obs** : - Estimation : -0.01390 - p-value : 0.3700 (non significatif) - Cela indique que cette variable n'a pas d'effet significatif sur maxO3.
+
+**Variables T9, T12, T15** : - Toutes ces variables ont des p-values supérieures à 0.05, indiquant qu'elles ne sont pas significatives dans le modèle.
+
+**Variable Ne9** : - Estimation : -2.15401 - p-value : 0.0275 (significatif à 5%) - Cela suggère que cette variable a un effet significatif négatif sur maxO3.
+
+**Variables Ne12, Ne15, Vx9, Vx12, Vx15** : - Toutes ces variables ne sont pas significatives (p-values très élevées).
+
+**Variable maxO3v** : - Estimation : 0.33848 - p-value : 2.34e-06 (très significatif) - C'est une variable très pertinente, car elle a un impact significatif positif sur maxO3.
+
+**Variables de vent (ventNord, ventOuest, ventSud)** : - Toutes ces variables ne sont pas significatives (p-values élevées).
+
+**Variable pluieSec** : - Estimation : 2.30046 - p-value : 0.5290 (non significatif) - Cela indique qu'elle n'a pas d'effet significatif sur maxO3.
+
+#### Conclusion sur les Variables Pertinentes
+
+Sur la base de cette analyse, les variables pertinentes dans le modèle de régression pour prédire maxO3 sont :
+
+-   **Ne9** (significatif avec p-value \< 0.05)
+-   **maxO3v** (très significatif avec p-value \< 0.001)
+
+### (p) Nous disposons d’une nouvelle observation de la température T12 égale à 19 degrés pour le 1er octobre 2001. Prédiction du niveau d’ozone pour cette date.
+
+```{r}
+# Sélectionner uniquement les colonnes numériques
+numeric_cols <- sapply(ozone, is.numeric) # Identifie les colonnes numériques
+mean_values <- colMeans(ozone[, numeric_cols], na.rm = TRUE) # Calcule les moyennes
+
+# Choisir une valeur aléatoire pour 'vent' et 'pluie'
+vent_random <- sample(unique(ozone$vent), 1)  # Valeur aléatoire pour 'vent'
+pluie_random <- sample(unique(ozone$pluie), 1) # Valeur aléatoire pour 'pluie'
+
+# Créer le DataFrame xpredict
+xpredict <- data.frame(
+  obs = 1,                     # Remplacer par une valeur appropriée
+  T9 = mean_values["T9"],      # Remplacer par la moyenne
+  T12 = 19,                    # Valeur spécifiée
+  T15 = mean_values["T15"],    # Remplacer par la moyenne
+  Ne9 = mean_values["Ne9"],     # Remplacer par la moyenne
+  Ne12 = mean_values["Ne12"],   # Remplacer par la moyenne
+  Ne15 = mean_values["Ne15"],   # Remplacer par la moyenne
+  Vx9 = mean_values["Vx9"],     # Remplacer par la moyenne
+  Vx12 = mean_values["Vx12"],   # Remplacer par la moyenne
+  Vx15 = mean_values["Vx15"],   # Remplacer par la moyenne
+  maxO3v = mean_values["maxO3v"], # Remplacer par la moyenne
+  vent = vent_random,            # Valeur aléatoire pour 'vent'
+  pluie = pluie_random            # Valeur aléatoire pour 'pluie'
+)
+
+# Prédire avec le modèle
+prediction <- predict(regc, newdata = xpredict, interval = "pred")
+
+# Afficher les résultats de la prédiction
+prediction
+```
+
+### (q) Représentons sur un même graphique l’intervalle de confiance d’une valeur lissée et l’intervalle de confiance d’une prévision.
+
+```{r}
+# Sélectionner uniquement les colonnes numériques
+numeric_cols <- sapply(ozone, is.numeric) # Identifie les colonnes numériques
+mean_values <- colMeans(ozone[, numeric_cols], na.rm = TRUE) # Calcule les moyennes
+
+# Choisir une valeur aléatoire pour 'vent' et 'pluie'
+vent_random <- sample(unique(ozone$vent), 1)  # Valeur aléatoire pour 'vent'
+pluie_random <- sample(unique(ozone$pluie), 1) # Valeur aléatoire pour 'pluie'
+
+# Créer le DataFrame pour les prédictions
+xpredict <- data.frame(
+  obs = 1,                     # Remplacer par une valeur appropriée
+  T9 = mean_values["T9"],      # Remplacer par la moyenne
+  T12 = seq(min(ozone[,"T12"]), max(ozone[,"T12"]), length = 100),  # Plage de T12
+  T15 = mean_values["T15"],    # Remplacer par la moyenne
+  Ne9 = mean_values["Ne9"],     # Remplacer par la moyenne
+  Ne12 = mean_values["Ne12"],   # Remplacer par la moyenne
+  Ne15 = mean_values["Ne15"],   # Remplacer par la moyenne
+  Vx9 = mean_values["Vx9"],     # Remplacer par la moyenne
+  Vx12 = mean_values["Vx12"],   # Remplacer par la moyenne
+  Vx15 = mean_values["Vx15"],   # Remplacer par la moyenne
+  maxO3v = mean_values["maxO3v"], # Remplacer par la moyenne
+  vent = vent_random,            # Valeur aléatoire pour 'vent'
+  pluie = pluie_random            # Valeur aléatoire pour 'pluie'
+)
+
+# Calculer les intervalles de confiance et de prévision
+IC <- predict(regc, newdata = xpredict, interval = "conf", level = 0.95)
+ICprev <- predict(regc, newdata = xpredict, interval = "pred", level = 0.95)
+
+# Tracer les données observées
+plot(maxO3 ~ T12, data = ozone, pch = 15, cex = 0.5, xlab = "T12", ylab = "Max O3")
+
+# Ajouter les lignes des intervalles de confiance et de prévision
+matlines(xpredict$T12, cbind(IC, ICprev[,-1]), lty = c(1, 2, 2, 3, 3), col = 1)
+
+# Ajouter une légende
+legend("topleft", lty = 2:3, legend = c("Prédictions", "Intervalle de confiance"), col = 1)
+
+
+```
+
+### (r) Analyse de la normalité des résidus.
+
+```{r}
+# Supposons que regc soit votre modèle de régression
+residus <- residuals(regc)
+
+# 1. Histogramme des résidus
+hist(residus, breaks = 20, main = "Histogramme des résidus", xlab = "Résidus", col = "lightblue", border = "black")
+
+# 2. Q-Q plot
+qqnorm(residus)
+qqline(residus, col = "red")  # Ligne de référence
+
+# 3. Test de Shapiro-Wilk
+shapiro_test <- shapiro.test(residus)
+print(shapiro_test)
+
+# Interpréter les résultats
+if (shapiro_test$p.value > 0.05) {
+  cat("Les résidus suivent une distribution normale (p-value =", shapiro_test$p.value, ")\n")
+} else {
+  cat("Les résidus ne suivent pas une distribution normale (p-value =", shapiro_test$p.value, ")\n")
+}
+
+```
+
+#### Interprétation
+
+-   **Histogramme** : L'histogramme ressemble à une distribution normale en forme de cloche, ce qui est un bon indicateur de normalité.
+-   **Q-Q plot** : Les points suivent la généralement ligne droite rouge, cela suggère que les résidus suivraient une distribution normale.
+-   **Test de Shapiro-Wilk** : La p-value est inférieure à 0.05, cela indique que les résidus ne suivent pas une distribution normale.
+
+## 10. Proposer un modèle de régression de O3 sur les variables T15, Ne12, Vx et maxO3v.
+
+### Création du modèle de régression
+
+Nous allons utiliser la fonction `lm()` pour créer le modèle. Voici comment procéder :
+
+```{r}
+# Créer le modèle de régression
+modele_regression <- lm(maxO3 ~ T15 + Ne12 + Vx9 + Vx12 + Vx15 + maxO3v, data = ozone)
+
+# Afficher le résumé du modèle
+summary(modele_regression)
+```
+
+### Interprétation des résultats
+
+#### Interprétation des coefficients :
+
+-   **(Intercept)**: Lorsque toutes les variables indépendantes sont nulles, la valeur d'O3 serait de 16.74. Cependant, cela peut ne pas avoir de sens pratique.
+
+-   **T15**: Pour chaque augmentation d'une unité de T15, la valeur d'O3 augmente en moyenne de 2.47 unités. Cette variable est très significative (p \< 0.001).
+
+-   **Ne12**: Pour chaque augmentation d'une unité de Ne12, la valeur d'O3 diminue en moyenne de 2.27 unités. Cette variable est significative (p = 0.012).
+
+-   **Vx9, Vx12, Vx15**: Ces variables ne sont pas significatives, car leurs p-values sont supérieures à 0.05. Cela suggère qu'elles n'ont pas d'effet discernable sur O3 dans le contexte de ce modèle.
+
+-   **maxO3v**: Pour chaque augmentation d'une unité de maxO3v, la valeur d'O3 augmente en moyenne de 0.35 unités. Cette variable est également très significative (p \< 0.001).
+
+#### Qualité de l'ajustement du modèle
+
+-   **Résidu standard error**: 14.82 indique la dispersion des résidus autour de la ligne de régression.
+
+-   **Multiple R-squared**: 0.7385 signifie que le modèle explique environ 73.85% de la variance dans O3. Cela est relativement bon, mais il reste de la variance inexpliquée.
+
+-   **Adjusted R-squared**: 0.7236 ajuste le R-squared en fonction du nombre de variables dans le modèle, indiquant une bonne qualité d'ajustement.
+
+-   **F-statistic**: 49.43 avec un p-value \< 2.2e-16 indique que le modèle est significatif globalement, suggérant qu'au moins une des variables indépendantes a un effet significatif sur la variable dépendante.
+
+### Comparaison avec le modèle complet
+
+```{r}
+# Créer le modèle de régression
+summary(modele_regression)
+
+# Créer le modèle complet avec toutes les variables
+regc <- lm(maxO3 ~ ., data = ozone)
+summary(regc)
+
+# Comparer les modèles
+anova(regc, modele_regression)
+```
+
+**R-squared et Adjusted R-squared** : Le **modèle complet** a un R-squared plus élevé (0.7705) par rapport au **nouveau modèle** (0.7385), ce qui indique qu'il explique mieux la variance de maxO3.
+
+**Significativité des coefficients** : Le **modèle complet** contient des variables supplémentaires qui peuvent influencer maxO3, comme Ne9, ce qui n'est pas le cas dans le **nouveau modèle**.
+
+**Résidus** : Bien que les deux modèles montrent une dispersion comparable des résidus, le **modèle complet** a des résidus légèrement plus petits en valeur absolue, indiquant une meilleure précision.
+
+**ANOVA** : L'analyse de variance montre que la réduction du nombre de variables dans le **nouveau modèle** n'est pas significativement bénéfique (p = 0.1641), ce qui suggère que les variables supplémentaires du **modèle complet** apportent une valeur ajoutée.
+
+## 11. Comparaison des modèles linéaires
+
+### Le modèle linéaire par rapport à quelle variable est-il raisonnable ?
+
+Le modèle linéaire que nous avons ajusté est raisonnable par rapport à la variable **maxO3**. Cette variable est notre variable dépendante, et nous essayons d'expliquer sa variabilité à l'aide des autres variables indépendantes présentes dans le jeu de données **ozone**. Le choix des variables indépendantes dans le modèle doit être fondé sur leur pertinence théorique et leur capacité à expliquer la variabilité de **maxO3**.
+
+### Influence de chaque variable
+
+Pour analyser l'influence de chaque variable, nous nous basons sur les résultats des coefficients de régression , ainsi que sur leur significativité. Voici une interprétation des résultats :
+
+-   **T15** : Coefficient positif (2.46676) et très significatif (p \< 0.001). Cela signifie qu'une augmentation de T15 est associée à une augmentation de **maxO3**, indiquant que cette variable a une forte influence positive sur **maxO3**.
+
+-   **Ne12** : Coefficient négatif (-2.26542) et significatif (p = 0.012). Cela indique qu'une augmentation de Ne12 est associée à une diminution de **maxO3**, suggérant une influence négative.
+
+-   **Vx9, Vx12, Vx15** : Ces variables ont des coefficients non significatifs (p \> 0.05). Cela suggère qu'elles n'ont pas d'influence notable sur **maxO3** dans le modèle.
+
+-   **maxO3v** : Coefficient positif (0.34745) et très significatif (p \< 0.001). Cela indique que cette variable a une influence positive sur **maxO3**.
+
+```{r}
+# Ajustement du modèle avec le package leaps
+choix <- regsubsets(maxO3 ~ ., data=ozone, nbest=1, nvmax=11)
+
+# Visualisation des résultats
+plot(choix)
+```
